@@ -1,0 +1,108 @@
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("tidyverse")
+install.packages("corrplot")
+install.packages("scales")
+install.packages("readxl")
+
+library(scales)
+library(corrplot)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(readxl)
+
+
+# CARREGANDO O DATASET
+d_1 <- "FEV-data-Excel.xlsx"
+d1 <- read_excel(d_1)
+
+# VISUALIZAÇÃO DAS CARACTERÍSTICAS DOS DADOS
+View(d1)
+summary(d1)
+
+# TRANSFORMANDO VARIÁVEIS EM TIPO FATOR
+dfator = c('Make', 'Type of brakes', 'Drive type')
+d1[dfator] = lapply(d1[dfator], factor)
+summary(d1[dfator])
+
+# SEPARANDO AS VARIÁVEIS NUMÉRICAS
+d1_num <- d1 %>% select_if(is.numeric)
+View(d1_num)
+
+# CRIANDO UMA MATRIZ DE CORRELAÇÃO
+matriz <- cor(d1_num)
+corrplot(matriz, method = "number")
+
+# SELECIONANDO A VARIÁVEL ALVO
+d1_num$`mean - Energy consumption [kWh/100 km]`
+
+# MODELO DE REGRESSÃO LINEAR 1
+mv1 <- lm(`mean - Energy consumption [kWh/100 km]` ~ ., data = d1_num)
+# VERIFICANDO AS VARIÁVEIS COM MAIS CAPACIDADE PREDITIVA
+summary(mv1)
+
+# SELECIONANDO AS VARIÁVEIS MAIS ÚTEIS
+d1_num_u = cbind(d1_num[4:5], d1_num[12:12], d1_num[20:20])
+# EXCLUINDO OS VALORES NA
+d1_num_u <- na.omit(d1_num_u)
+# CRIANDO A NOVA MATRIZ DE CORRELAÇÃO
+matriz2 <- cor(d1_num_u)
+corrplot(matriz2, 
+         method = 'color', 
+         addCoef.col = 'springgreen2', 
+         tl.col = "black", 
+         tl.srt = 45)
+
+# MODELO DE REGRESSÃO LINEAR 2
+mv2 <- lm(`mean - Energy consumption [kWh/100 km]` ~ ., data = d1_num_u)
+summary(mv2)
+View(d1_num_u)
+
+# SEPARANDO ENTRE TREINO E TESTE
+indexes <- sample(1:nrow(d1_num_u), size = 0.88 * nrow(d1_num_u))
+train.data <- d1_num_u[indexes,]
+test.data <- d1_num_u[-indexes,]
+
+# MODELO DE REGRESSÃO LINEAR 3
+mv3 <- lm(`mean - Energy consumption [kWh/100 km]` ~ ., data = train.data)
+summary(mv3)
+
+# VERIFICAÇÃO DE RESÍDUOS
+residuos <- resid(mv3)
+class(residuos)
+length(residuos)
+
+# VISUALIZAÇÕES DA DISTRIBUIÇÃO DOS RESÍDUOS
+# COMPARATIVO ENTRE OS VALORES AJUSTADOS E OS RESÍDUOS
+ggplot(train.data, aes(x = predict(mv3), y = residuos)) +
+  geom_point() +
+  geom_smooth(se = FALSE, method = 'loess') +
+  ggtitle("Resíduos vs Valores Ajustados") +
+  xlab("Valores Ajustados") +
+  ylab("Resíduos")
+
+# VERIFICAÇÃO DA NORMALIDADE DOS RESÍDUOS
+ggplot(train.data, aes(x = residuos)) +
+  geom_histogram(binwidth = 1, fill = '#1E90FF', alpha = 0.7) +
+  ggtitle("Histograma dos Resíduos") +
+  xlab("Resíduos")
+
+# CONFIRMANDO A NORMALIDADE DOS RESÍDUOS
+ggplot(train.data, aes(sample = residuos)) +
+  geom_qq() +
+  geom_qq_line() +
+  ggtitle("QQ-Plot dos Resíduos") +
+  xlab("Quantis Teóricos") +
+  ylab("Quantis Amostrais")
+
+
+# TESTE DO MODELO
+previsoes <- predict(mv3, newdata = test.data)
+
+c1 <- data.frame(previsoes)
+c2 <- data.frame(test.data$`mean - Energy consumption [kWh/100 km]`)
+compara <- cbind(c1,c2)
+View(compara)
+
+save(mv3, file = "modelo_ElectricCars.RData")
